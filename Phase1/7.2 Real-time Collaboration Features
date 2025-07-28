@@ -1,0 +1,27 @@
+from flask_socketio import SocketIO, emit
+import redis
+
+class CollaborationService:
+    def __init__(self, app):
+        self.socketio = SocketIO(app, cors_allowed_origins="*")
+        self.redis_client = redis.Redis(host='localhost', port=6379, db=0)
+        self.setup_events()
+
+    def setup_events(self):
+        @self.socketio.on('design_update')
+        def handle_design_update(data):
+            # Broadcast design changes to all connected clients
+            emit('design_changed', data, broadcast=True, include_self=False)
+
+            # Store in Redis for persistence
+            self.redis_client.set(f"design_{data['session_id']}", json.dumps(data))
+
+        @self.socketio.on('join_session')
+        def handle_join_session(data):
+            session_id = data['session_id']
+            join_room(session_id)
+
+            # Send current design state
+            current_design = self.redis_client.get(f"design_{session_id}")
+            if current_design:
+                emit('design_state', json.loads(current_design))
